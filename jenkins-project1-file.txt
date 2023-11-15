@@ -1,0 +1,100 @@
+pipeline
+{
+    agent any
+    
+    environment 
+    {
+                APP_NAME = "mytomee"
+                IMAGE_NAME = "${APP_NAME}"
+                BUILD_VERSION = getVersion()
+    }
+    stages
+    {
+        stage("Download code")
+        {
+            steps
+            {
+                git 'https://github.com/meenashreyansh12/Project1.git'
+            }
+        }
+        stage("Test Application")
+        {
+            steps
+            {
+               sh 'mvn test'    
+            }
+        }
+        stage("Build Application")
+        {
+            steps
+            {
+               sh 'mvn package'    
+            }
+        }
+        stage("Build docker image")
+        {
+            steps
+            {
+                sh 'docker build -t mytomee .'
+            }
+        }
+        stage("Push Docker image To ECR")
+         {
+            steps
+            {
+                script
+                {
+                    sh "aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 433609462612.dkr.ecr.us-west-2.amazonaws.com"
+                    sh "docker tag mytomee:latest 433609462612.dkr.ecr.us-west-2.amazonaws.com/mytomee:latest"
+                    sh "docker push 433609462612.dkr.ecr.us-west-2.amazonaws.com/mytomee:latest"
+
+                    
+                }
+            }
+         }
+         stage("Clear Docker images locally")
+         {
+            steps
+            {
+                sh 'docker system prune -af'
+            }
+        }
+        stage("Deploying ECR image") 
+        {
+            steps 
+            { 
+                script
+                { 
+                    sh "ssh ubuntu@172.31.31.77 aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 433609462612.dkr.ecr.us-west-2.amazonaws.com"
+                    sh "ssh ubuntu@172.31.31.77 docker pull 433609462612.dkr.ecr.us-west-2.amazonaws.com/mytomee:latest"
+                }
+            }
+        }
+         stage("Run Docker image") 
+         {
+            steps
+            {
+                sh "ssh ubuntu@172.31.31.77 docker run --name myappcontainer -d -p 9090:8080 433609462612.dkr.ecr.us-west-2.amazonaws.com/mytomee:latest"
+            }
+        }
+    }
+        post 
+        {
+        success 
+        {
+            mail bcc: '', body: 'ci-cd gets success', cc: '', from: '', replyTo: '', subject: 'Pojects completed successfully', to: 'meenpenu99@gmail.com'
+            echo "Project completed Successfully"
+        }
+        failure
+        {
+            mail bcc: '', body: 'failed ci-cd', cc: '', from: '', replyTo: '', subject: 'Pojects Failed', to: 'meenpenu99@gmail.com'
+            echo "Project Failed"
+        }
+    }
+}
+    def getVersion() 
+    {
+    def buildNumber = env.BUILD_NUMBER ?: '0'
+    return "1.0.${buildNumber}"
+    }
+    
